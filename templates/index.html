@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <title>発音チェッカー</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem auto;
+            max-width: 600px;
+            padding: 1rem;
+            line-height: 1.6;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            color: #333;
+        }
+        form {
+            margin-bottom: 2rem;
+        }
+        input[type="text"] {
+            width: 80%;
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            margin-left: 0.5rem;
+        }
+        .result-block {
+            background: #fff;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        .ipa {
+            font-family: "Arial", "Segoe UI", "IPA", sans-serif;
+            font-size: 1.2rem;
+            color: #444;
+        }
+        b {
+            font-weight: bold;
+            color: #0f0e0e;
+        }
+        .label {
+            font-weight: bold;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cambridge風 発音アナライザー</h1>
+
+    <form method="post" action="/analyze">
+        <input
+            type="text"
+            id="input_text"
+            name="input_text"
+            placeholder="例: banana, advantage"
+            required
+            value="{{ input_text | default('') }}"
+            aria-label="単語入力"
+        />
+        <button type="submit">解析</button>
+    </form>
+
+    {% if input_text %}
+        {% if results %}
+            {% if results|length == 1 %}
+                <div class="result-block">
+                    <div class="label">入力された単語：</div>
+                    <p>{{ input_text }}</p>
+
+                    <div class="label">🇬🇧 イギリス英語発音（強勢 + IPA）:</div>
+                    <p class="ipa">{{ results[0].uk | safe }}</p>
+
+                    <div class="label">🇺🇸 アメリカ英語発音（強勢 + IPA）:</div>
+                    <p class="ipa">{{ results[0].us | safe }}</p>
+                </div>
+            {% else %}
+                {% for res in results %}
+                    <div class="result-block">
+                        <div class="label">単語：{{ res.word }}</div>
+
+                        <div class="label">🇬🇧 イギリス英語発音（強勢 + IPA）:</div>
+                        <p class="ipa">{{ res.uk | safe }}</p>
+
+                        <div class="label">🇺🇸 アメリカ英語発音（強勢 + IPA）:</div>
+                        <p class="ipa">{{ res.us | safe }}</p>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% else %}
+            <p>発音データが見つかりませんでした。</p>
+        {% endif %}
+    {% endif %}
+</body>
+</html>

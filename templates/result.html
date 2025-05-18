@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <title>発音表示</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 80%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: center;
+        }
+        textarea {
+            font-size: 16px;
+            font-family: monospace;
+        }
+        button {
+            margin-top: 10px;
+            padding: 8px 12px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>発音解析</h1>
+    <form method="post" action="/analyze">
+        <textarea name="input_text" rows="4" cols="50">{{ input_text | default('') }}</textarea><br />
+        <button type="submit">解析する</button>
+    </form>
+
+    {% if results %}
+    <h2>結果</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>単語</th>
+                <th>UK発音</th>
+                <th>US発音</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td>{{ r.word }}</td>
+                <td>{{ r.uk | safe }}</td>
+                <td>{{ r.us | safe }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</body>
+</html>
