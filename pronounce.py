@@ -4,74 +4,85 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 import requests
 import logging
+import re
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# ロギング設定
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def emphasize_stress(ipa_text: str) -> str:
-    """
-    IPA表記中の強勢記号 ˈ の直後の音節を <b>太字化</b>する処理。
-    例: ˈɪm.pɔːt → ˈ<b>ɪm</b>.pɔːt
-    """
+#ipa表示にするなどしている
+def apply_pronunciation_styles(ipa_text: str, r_drop_color: str = "pink") -> str:
     if not ipa_text:
         return ""
 
-    result = ""
+    processed_text = ""
     i = 0
     while i < len(ipa_text):
-        if ipa_text[i] == "ˈ":
-            result += "ˈ"
+        char = ipa_text[i]
+        if char == "ˈ":
+            processed_text += "ˈ"
             i += 1
             bold_chars = ""
-            while i < len(ipa_text) and ipa_text[i] not in [".", " ", "ˌ"]:
+            while i < len(ipa_text) and ipa_text[i] not in [".", " ", "ˌ", "ˈ"]:
                 bold_chars += ipa_text[i]
                 i += 1
-            result += f"<b>{bold_chars}</b>"
-        else:
-            result += ipa_text[i]
+            processed_text += f"<b>{bold_chars}</b>"
+            continue
+        if char == "ˌ":
+            processed_text += "ˌ"
             i += 1
-    return result
+            continue
+        match = re.match(r"([aæeɪiɒɔuʊəʌtdszʒʃθðŋlrwjy])r([. ]|$)", ipa_text[i:])
+        if match and ipa_text[i] == 'r':
+            processed_text += f'<span style="color:{r_drop_color};">{char}</span>'
+        else:
+            processed_text += char
+        i += 1
+    return processed_text
 
 def fetch_pronunciations(word: str):
-    """
-    DictionaryAPI.dev から発音データを取得し、UK/US IPA を強勢付きで整形。
-    """
     url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.lower()}"
     try:
         response = requests.get(url)
         data = response.json()
         logger.info(f"API response for '{word}': {data}")
 
-        phonetics = data[0].get("phonetics", []) if data else []
-        uk_pron = ""
-        us_pron = ""
+        phonetics = data[0].get("phonetics", []) if data and isinstance(data, list) and len(data) > 0 else []
+        uk_pron, us_pron = "", ""
 
         for p in phonetics:
             if "audio" in p and p["audio"]:
                 audio_url = p["audio"].lower()
-                if "uk" in audio_url:
+                if "uk" in audio_url and not uk_pron:
                     uk_pron = p.get("text", "")
-                elif "us" in audio_url:
+                if "us" in audio_url and not us_pron:
                     us_pron = p.get("text", "")
+            if "text" in p:
+                if "(UK)" in p["text"] and not uk_pron:
+                    uk_pron = p["text"].replace("(UK)", "").strip()
+                if "(US)" in p["text"] and not us_pron:
+                    us_pron = p["text"].replace("(US)", "").strip()
 
-        # バックアップ用：先頭2件をUK/US用として補完
-        if not uk_pron and len(phonetics) >= 1:
-            uk_pron = phonetics[0].get("text", "")
-        if not us_pron and len(phonetics) >= 2:
-            us_pron = phonetics[1].get("text", "")
+        if not uk_pron and phonetics:
+            for p in phonetics:
+                if "text" in p and "audio" not in p:
+                    uk_pron = p["text"]
+                    break
+        if not us_pron and phonetics:
+            for p in phonetics:
+                if "text" in p and "audio" not in p and p["text"] != uk_pron:
+                    us_pron = p["text"]
+                    break
 
-        # 強勢記号の太字化
-        uk_pron = emphasize_stress(uk_pron)
-        us_pron = emphasize_stress(us_pron)
+        styled_uk_pron = apply_pronunciation_styles(uk_pron, r_drop_color="pink")
+        styled_us_pron = apply_pronunciation_styles(us_pron, r_drop_color="transparent")
 
-        return uk_pron, us_pron, data
+        return styled_uk_pron, styled_us_pron, data
 
     except Exception as e:
-        logger.error(f"API呼び出し中にエラー発生: {e}")
+        logger.error(f"API Error: {e}")
         return "", "", None
 
 @app.get("/", response_class=HTMLResponse)
@@ -80,12 +91,14 @@ async def read_root(request: Request):
 
 @app.post("/analyze", response_class=HTMLResponse)
 async def analyze_text(request: Request, input_text: str = Form(...)):
-    words = [w.strip(",.?!") for w in input_text.split()]
+    words = [w.strip(",.?!\"'()[]{}<>").lower() for w in input_text.split()]
     results = []
     for w in words:
         if not w:
             continue
         uk, us, api_data = fetch_pronunciations(w)
+        if not uk and not us:
+            uk = us = "N/A"
         results.append({
             "word": w,
             "uk": uk,
